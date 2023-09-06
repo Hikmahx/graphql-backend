@@ -1,0 +1,31 @@
+{
+  "name": "graphql-backend",
+  "version": "1.0.0",
+  "description": "Using graphql for the first time",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hikmahx/graphql-backend.git"
+  },
+  "author": "hikmahx",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Hikmahx/graphql-backend/issues"
+  },
+  "homepage": "https://github.com/Hikmahx/graphql-backend#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-graphql": "^0.12.0",
+    "graphql": "^16.8.0",
+    "mongoose": "^7.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
