@@ -115,18 +115,46 @@ const mutation = new GraphQLObjectType({
         id: { type: new GraphQLNonNull(GraphQLID) },
         username: { type: GraphQLString },
         email: { type: GraphQLString },
+        password: { type: GraphQLString },
+        currentPassword: { type: GraphQLString },
       },
-      resolve(parent, args) {
-        return User.findByIdAndUpdate(
-          args.id,
-          {
-            $set: {
-              username: args.username,
-              email: args.email,
+      async resolve(parent, args) {
+        try {
+          const { password, currentPassword, ...others } = args;
+          const user = await User.findById(args.id);
+
+          let newPassword;
+
+          if (!user) {
+            throw new Error("User doesn't exists");
+          }
+          // CHECK IF THE USER WANTS TO UPDATE THEIR PASSWORD
+          if (args.password) {
+            // IF CURRENT PASSWORD ISN'T GIVEN
+            if (!args.currentPassword) {
+              throw new Error("Provide your current password with 'currentPassword' before you can update your password");
             }
-          },
-          { new: true }
-        )
+            let salt = await bcrypt.genSalt(10);
+            newPassword = await bcrypt.hash(args.password, salt);
+            const isMatch = await bcrypt.compare(currentPassword, user.password);
+            if (!isMatch) {
+              throw new Error("Old password isn't correct");
+            }
+          }
+          return User.findByIdAndUpdate(
+            args.id,
+            {
+              $set: {
+                ...others,
+                password: newPassword,
+              },
+            },
+            { new: true }
+          )
+        } catch (err) {
+          console.log(err)
+          throw new Error(err.message);
+        }
       }
     },
     deleteUser: {
