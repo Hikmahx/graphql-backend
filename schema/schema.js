@@ -1,64 +1,49 @@
-const Project = require('../models/Project')
-const Client = require('../models/Client')
-
+const User = require('../models/User');
 const { GraphQLObjectType, GraphQLID, GraphQLString, GraphQLSchema, GraphQLList, GraphQLNonNull, GraphQLEnumType } = require('graphql')
+const jwt = require('jsonwebtoken');
+const dotenv = require('dotenv');
+const bcrypt = require('bcryptjs')
+dotenv.config({ path: '../config/config.env' });
 
-const ProjectType = new GraphQLObjectType({
-  name: 'Project',
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: '3h',
+  });
+};
+
+const AuthType = new GraphQLObjectType({
+  name: 'Auth',
   fields: () => ({
-    id: { type: GraphQLID },
-    name: { type: GraphQLString },
-    description: { type: GraphQLString },
-    status: { type: GraphQLString },
-    client: {
-      type: ClientType,
-      resolve(parent, args) {
-        return Client.findById(parent.clientId)
-      },
-    },
+    token: { type: GraphQLString },
   }),
 });
 
-
-const ClientType = new GraphQLObjectType({
-  name: 'Client',
+const UserType = new GraphQLObjectType({
+  name: 'User',
   fields: () => ({
     id: { type: GraphQLID },
-    name: { type: GraphQLString },
+    username: { type: GraphQLString },
     email: { type: GraphQLString },
-    phone: { type: GraphQLString },
+    password: { type: GraphQLString },
   })
 });
+
 
 const RootQuery = new GraphQLObjectType({
   name: 'RootQueryType',
   fields: {
-    projects: {
-      type: new GraphQLList(ProjectType),
+    users: {
+      type: new GraphQLList(UserType),
       args: { id: { type: GraphQLID } },
       resolve(parent, args) {
-        return Project.find();
+        return User.find();
       }
     },
-    project: {
-      type: ProjectType,
+    user: {
+      type: UserType,
       args: { id: { type: GraphQLID } },
       resolve(parent, args) {
-        return Project.findById(args.id)
-      }
-    },
-    clients: {
-      type: new GraphQLList(ClientType),
-      args: { id: { type: GraphQLID } },
-      resolve(parent, args) {
-        return Client.find()
-      }
-    },
-    client: {
-      type: ClientType,
-      args: { id: { type: GraphQLID } },
-      resolve(parent, args) {
-        return Client.findById(args.id)
+        return User.findById(args.id)
       }
     },
   }
@@ -67,97 +52,90 @@ const RootQuery = new GraphQLObjectType({
 const mutation = new GraphQLObjectType({
   name: 'Mutation',
   fields: {
-    addClient: {
-      type: ClientType,
+    signup: {
+      type: AuthType,
       args: {
-        name: { type: new GraphQLNonNull(GraphQLString) },
+        username: { type: new GraphQLNonNull(GraphQLString) },
         email: { type: new GraphQLNonNull(GraphQLString) },
-        phone: { type: new GraphQLNonNull(GraphQLString) },
+        password: { type: new GraphQLNonNull(GraphQLString) },
       },
-      resolve(parent, args) {
-        const client = new Client({
-          name: args.name,
-          email: args.email,
-          phone: args.phone
-        })
+      async resolve(parent, args) {
+        const { username, email, password } = args;
 
-        return client.save();
-      }
+        try {
+          let user = await User.findOne({ email });
+
+          if (user) {
+            throw new Error('User already exists');
+          }
+
+          // Create a new user
+          user = new User({
+            username,
+            email,
+            password,
+          });
+
+          let salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(password, salt);
+
+          await user.save();
+
+          // Generate a JWT token upon successful signup
+          const token = generateToken(user.id);
+          return { user, token };
+        } catch (err) {
+          throw new Error(err.message);
+        }
+      },
     },
-    deleteClient: {
-      type: ClientType,
-      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
-      resolve(parent, args) {
-        return Client.findByIdAndDelete(args.id)
-      }
-    },
-    addProject: {
-      type: ProjectType,
+    login: {
+      type: AuthType,
       args: {
-        name: { type: new GraphQLNonNull(GraphQLString) },
-        description: { type: new GraphQLNonNull(GraphQLString) },
-        status: {
-          type: new GraphQLEnumType({
-            name: 'ProjectStatus',
-            values: {
-              new: { value: 'Not Started' },
-              progress: { value: 'In progress' },
-              completed: { value: 'Completed' },
-            },
-          }),
-          defaultValue: 'Not Started',
-        },
-        clientId: { type: new GraphQLNonNull(GraphQLID) }
+        email: { type: new GraphQLNonNull(GraphQLString) },
+        password: { type: new GraphQLNonNull(GraphQLString) },
       },
-      resolve(parent, args) {
-        const project = new Project({
-          name: args.name,
-          description: args.description,
-          status: args.status,
-          clientId: args.clientId
-        })
-
-        return project.save();
-      }
+      async resolve(parent, args) {
+        try {
+          const user = await User.findOne({ email: args.email })
+          if (!user) {
+            throw new Error("User doesn't exists");
+          }
+          const token = generateToken(args.id);
+          return { token };
+        } catch (err) {
+          // console.log(err)
+          throw new Error(err.message);
+        }
+      },
     },
-    deleteProject: {
-      type: ProjectType,
-      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
-      resolve(parent, args) {
-        return Project.findByIdAndDelete(args.id)
-      }
-    },
-    updateProject: {
-      type: ProjectType,
+    updateUser: {
+      type: UserType,
       args: {
         id: { type: new GraphQLNonNull(GraphQLID) },
-        name: { type: GraphQLString },
-        description: { type: GraphQLString },
-        status: {
-          type: new GraphQLEnumType({
-            name: 'ProjectStatusUpdate',
-            values: {
-              new: { value: 'Not Started' },
-              progress: { value: 'In progress' },
-              completed: { value: 'Completed' },
-            },
-          }),
-        },
+        username: { type: GraphQLString },
+        email: { type: GraphQLString },
       },
       resolve(parent, args) {
-        return Project.findByIdAndUpdate(
+        return User.findByIdAndUpdate(
           args.id,
           {
             $set: {
-              name: args.name,
-              description: args.description,
-              status: args.status
+              username: args.username,
+              email: args.email,
             }
           },
           { new: true }
         )
       }
-    }
+    },
+    deleteUser: {
+      type: UserType,
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve(parent, args) {
+        return User.findByIdAndDelete(args.id)
+      }
+    },
   }
 })
 
